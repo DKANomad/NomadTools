@@ -4,6 +4,9 @@
 #include <QtWidgets/qpushbutton.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qlineedit.h>
+#include <QtWidgets/qlabel.h>
+#include <QtWidgets/qformlayout.h>
 
 #include <obs-frontend-api.h>
 #include <util/config-file.h>
@@ -13,18 +16,14 @@
 
 QVBoxLayout *groupRecordingsDialogLayout;
 QDialog *groupRecordingsDialog;
-QPushButton *testButton;
+QPushButton *saveGroupRecordingButton;
 ConfigFile basicConfig;
+QLineEdit *folderToAppend;
+config_t *profileConfig;
 
 void MainDock::on_groupRecordingsButton_clicked()
 {
 	groupRecordingsDialog->show();
-}
-
-void stop(obs_frontend_event evt, void *private_data) {
-	if (evt == OBS_FRONTEND_EVENT_RECORDING_STOPPED) {
-		
-	}
 }
 
 void ensure_directory_exists(std::string &path)
@@ -83,29 +82,48 @@ void GroupRecordings::SetCurrentOutputPath(config_t* config, char* newPath) {
 	}
 }
 
-void GroupRecordings::InitializePlugin(MainDock *mainDock) {
-	// Binds the stop callback to obs frontend event
-	obs_frontend_event_cb cb = obs_frontend_event_cb(stop);
-	obs_frontend_add_event_callback(cb, "");
+void GroupRecordings::On_SaveGroupRecording_Clicked() {
 
-	groupRecordingsDialog = new QDialog(mainDock);
-	groupRecordingsDialog->setWindowTitle(
-		QString::fromUtf8("Group Recordings"));
-	groupRecordingsDialog->setFixedSize(1000, 1000);
-
-	groupRecordingsDialogLayout = new QVBoxLayout(groupRecordingsDialog);
-
-	testButton = new QPushButton(QString::fromUtf8("Testing"));
-	groupRecordingsDialogLayout->addWidget(testButton);
-
-	config_t *profileConfig = obs_frontend_get_profile_config();
+	std::string textToSave = folderToAppend->text().toStdString();
 	const char *outputPath = GetCurrentOutputPath(profileConfig);
+
 	char fullVal[256] = "";
 	strcpy(fullVal, outputPath);
-	char *newVal = strcat(fullVal, "\\group-recordings");
+
+	// Adds path separator in anticipation for incoming directory name
+	strcat(fullVal, "\\");
+
+	char *newVal = strcat(fullVal, textToSave.c_str());
 	SetCurrentOutputPath(profileConfig, newVal);
 
 	// We concat \\ to the end as it's needed for creating the directory
 	strcat(newVal, "\\");
 	ensure_directory_exists(std::string(newVal));
+}
+
+void GroupRecordings::InitializePlugin(MainDock *mainDock) {
+
+	profileConfig = obs_frontend_get_profile_config();
+
+	groupRecordingsDialog = new QDialog(mainDock);
+	groupRecordingsDialog->setWindowTitle(
+		QString::fromUtf8("Group Recordings"));
+	groupRecordingsDialog->setFixedSize(500, 200);
+
+	QFormLayout *formLayout = new QFormLayout();
+	QLabel *folderToAppendLabel =
+		new QLabel(QString::fromUtf8("Folder name"));
+	folderToAppend = new QLineEdit();
+
+	formLayout->addRow(folderToAppendLabel, folderToAppend);
+
+	groupRecordingsDialogLayout = new QVBoxLayout(groupRecordingsDialog);
+	groupRecordingsDialogLayout->addLayout(formLayout);
+
+	saveGroupRecordingButton = new QPushButton(QString::fromUtf8("Save Changes"));
+	groupRecordingsDialogLayout->addWidget(saveGroupRecordingButton);
+
+	// Connects save button to callback
+	QWidget::connect(saveGroupRecordingButton, &QPushButton::clicked, this,
+			 &GroupRecordings::On_SaveGroupRecording_Clicked);
 }

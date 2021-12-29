@@ -7,7 +7,7 @@ class GroupRecordings : public QObject {
 public:
 	void InitializePlugin(MainDock *mainDock);
 	const char *GetCurrentOutputPath(config_t *config);
-	void SetCurrentOutputPath(config_t *config, char* newPath);
+	void SetCurrentOutputPath(config_t *config, const char* newPath);
 
 	void On_SaveGroupRecording_Clicked();
 };

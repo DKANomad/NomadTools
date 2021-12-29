@@ -1,6 +1,7 @@
 #include "group-recordings.h"
 
 #include <QtCore/qstring.h>
+#include <QtCore/qdir.h>
 #include <QtWidgets/qpushbutton.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qboxlayout.h>
@@ -63,7 +64,7 @@ const char *GroupRecordings::GetCurrentOutputPath(config_t* config)
 }
 
 // Use the same logic as OBSBasic to ascertain the current output path and change it
-void GroupRecordings::SetCurrentOutputPath(config_t* config, char* newPath) {
+void GroupRecordings::SetCurrentOutputPath(config_t* config, const char* newPath) {
 	const char *mode = config_get_string(config, "Output", "Mode");
 
 	if (strcmp(mode, "Advanced") == 0) {
@@ -84,21 +85,14 @@ void GroupRecordings::SetCurrentOutputPath(config_t* config, char* newPath) {
 
 void GroupRecordings::On_SaveGroupRecording_Clicked() {
 
-	std::string textToSave = folderToAppend->text().toStdString();
-	const char *outputPath = GetCurrentOutputPath(profileConfig);
+	QString newOutputFolderName = folderToAppend->text();
 
-	char fullVal[256] = "";
-	strcpy(fullVal, outputPath);
-
-	// Adds path separator in anticipation for incoming directory name
-	strcat(fullVal, "\\");
-
-	char *newVal = strcat(fullVal, textToSave.c_str());
-	SetCurrentOutputPath(profileConfig, newVal);
-
-	// We concat \\ to the end as it's needed for creating the directory
-	strcat(newVal, "\\");
-	ensure_directory_exists(std::string(newVal));
+	QDir outputDir = QDir(QString(GetCurrentOutputPath(profileConfig)));
+	outputDir.mkdir(newOutputFolderName);
+	outputDir.cd(newOutputFolderName);
+	
+	SetCurrentOutputPath(profileConfig,
+			     outputDir.path().toStdString().c_str());
 }
 
 void GroupRecordings::InitializePlugin(MainDock *mainDock) {

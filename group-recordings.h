@@ -10,4 +10,5 @@ public:
 	void SetCurrentOutputPath(config_t *config, const char* newPath);
 
 	void On_SaveGroupRecording_Clicked();
+	void On_GroupRecordingToggle_Clicked();
 };

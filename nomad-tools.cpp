@@ -29,13 +29,18 @@ bool obs_module_load(void)
 	groupRecordingsPlugin->InitializePlugin(mainDock);
 
 	QPushButton *groupRecordingsButton = new QPushButton(
-		QString::fromUtf8("Group Recordings"), mainDockContents);
+		QString::fromUtf8("Group Recordings"));
 	groupRecordingsButton->setObjectName("groupRecordingsButton");
+
+	QPushButton* groupRecordingsButtonToggle = new QPushButton(
+		QString::fromUtf8("Enable Group Recording"));
+	groupRecordingsButtonToggle->setObjectName("groupRecordingsButtonToggle");
 
 	QVBoxLayout *mainBoxLayout = new QVBoxLayout(mainDockContents);
 	mainBoxLayout->setSpacing(2);
 	mainBoxLayout->setAlignment(Qt::AlignTop);
 	mainBoxLayout->addWidget(groupRecordingsButton);
+	mainBoxLayout->addWidget(groupRecordingsButtonToggle);
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 	mainWindow->addDockWidget(Qt::BottomDockWidgetArea, mainDock);
@@ -43,6 +48,10 @@ bool obs_module_load(void)
 	// Connects the group recordings tool button to the MainDock event handler.
 	QWidget::connect(groupRecordingsButton, &QPushButton::clicked, mainDock,
 			 &MainDock::on_groupRecordingsButton_clicked);
+
+	QWidget::connect(groupRecordingsButtonToggle, &QPushButton::clicked,
+			 groupRecordingsPlugin,
+			 &GroupRecordings::On_GroupRecordingToggle_Clicked);
 
 	mainDock->setWidget(mainDockContents);
 	obs_frontend_add_dock(mainDock);

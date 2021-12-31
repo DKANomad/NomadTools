@@ -22,6 +22,8 @@ ConfigFile basicConfig;
 QLineEdit *folderToAppend;
 config_t *profileConfig;
 
+const char *CONFIG_SECTION = "NomadTools.GroupRecording";
+
 void MainDock::on_groupRecordingsButton_clicked()
 {
 	groupRecordingsDialog->show();
@@ -90,14 +92,36 @@ void GroupRecordings::On_SaveGroupRecording_Clicked() {
 	QDir outputDir = QDir(QString(GetCurrentOutputPath(profileConfig)));
 	outputDir.mkdir(newOutputFolderName);
 	outputDir.cd(newOutputFolderName);
-	
+
+	config_set_string(profileConfig, CONFIG_SECTION, "CurrentDirectory",
+			  newOutputFolderName.toStdString().c_str());
+}
+
+void GroupRecordings::On_GroupRecordingToggle_Clicked() {
+	QString currentOutputFolder = QString(config_get_string(
+		profileConfig, CONFIG_SECTION, "CurrentDirectory"));
+
+	QString currentOutputPath =
+		QString(GetCurrentOutputPath(profileConfig));
+
+	if (currentOutputPath.contains(currentOutputFolder)) {
+		currentOutputFolder.remove(currentOutputFolder.prepend("\\"));
+	} else {
+		currentOutputFolder.append(currentOutputFolder.prepend("\\"));
+	}
+
 	SetCurrentOutputPath(profileConfig,
-			     outputDir.path().toStdString().c_str());
+			     currentOutputPath.toStdString().c_str());
 }
 
 void GroupRecordings::InitializePlugin(MainDock *mainDock) {
 
 	profileConfig = obs_frontend_get_profile_config();
+
+	if (config_get_bool(profileConfig, CONFIG_SECTION, "Enabled") == NULL) {
+		config_set_bool(profileConfig, CONFIG_SECTION, "Enabled",
+				false);
+	}
 
 	groupRecordingsDialog = new QDialog(mainDock);
 	groupRecordingsDialog->setWindowTitle(

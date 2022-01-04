@@ -3,6 +3,8 @@
 #include "nomad-tools.h"
 #include <obs-frontend-api.h>
 
+#include <QtWidgets/qpushbutton.h>
+
 class GroupRecordings : public QObject {
 public:
 	void InitializePlugin(MainDock *mainDock);
@@ -11,4 +13,9 @@ public:
 
 	void On_SaveGroupRecording_Clicked();
 	void On_GroupRecordingToggle_Clicked();
+
+	void ChangeToggleText(bool enabled);
+
+	QPushButton *groupRecordingsButtonToggle;
+	QPushButton *groupRecordingsButton;
 };

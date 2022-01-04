@@ -2,7 +2,6 @@
 
 #include <QtCore/qstring.h>
 #include <QtCore/qdir.h>
-#include <QtWidgets/qpushbutton.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qlineedit.h>
@@ -22,28 +21,39 @@ ConfigFile basicConfig;
 QLineEdit *folderToAppend;
 config_t *profileConfig;
 
-const char *CONFIG_SECTION = "NomadTools.GroupRecording";
+const char *CONFIG_SECTION = "NomadTools.GroupRecordings";
 
-void MainDock::on_groupRecordingsButton_clicked()
+bool PluginCurrentlyEnabled()
 {
-	groupRecordingsDialog->show();
+	return config_get_bool(profileConfig, CONFIG_SECTION, "Enabled");
 }
 
-void ensure_directory_exists(std::string &path)
+void SetPluginCurrentlyEnabled(bool value)
 {
-	replace(path.begin(), path.end(), '\\', '/');
+	config_set_bool(profileConfig, CONFIG_SECTION, "Enabled", value);
+}
 
-	size_t last = path.rfind('/');
-	if (last == std::string::npos)
-		return;
+void MainDock::on_groupRecordingsButton_clicked() {
+	QString currentDirectory = QString(
+		config_get_string(profileConfig, CONFIG_SECTION,
+				  "CurrentDirectory"));
 
-	std::string directory = path.substr(0, last);
-	os_mkdirs(directory.c_str());
+	groupRecordingsDialog->show();
+	folderToAppend->setText(currentDirectory);
+}
+
+void GroupRecordings::ChangeToggleText(bool enabled) {
+	if (enabled) {
+		groupRecordingsButtonToggle->setText(
+			QString::fromUtf8("Disable Group Recording"));
+	} else {
+		groupRecordingsButtonToggle->setText(
+			QString::fromUtf8("Enable Group Recording"));
+	}
 }
 
 // Use the same logic as OBSBasic to ascertain the current output path
-const char *GroupRecordings::GetCurrentOutputPath(config_t* config)
-{
+const char *GroupRecordings::GetCurrentOutputPath(config_t* config) {
 	const char *path = nullptr;
 	const char *mode = config_get_string(config, "Output", "Mode");
 
@@ -83,10 +93,11 @@ void GroupRecordings::SetCurrentOutputPath(config_t* config, const char* newPath
 	} else {
 		config_set_string(config, "SimpleOutput", "FilePath", newPath);
 	}
+
+	config_save(profileConfig);
 }
 
 void GroupRecordings::On_SaveGroupRecording_Clicked() {
-
 	QString newOutputFolderName = folderToAppend->text();
 
 	QDir outputDir = QDir(QString(GetCurrentOutputPath(profileConfig)));
@@ -95,20 +106,28 @@ void GroupRecordings::On_SaveGroupRecording_Clicked() {
 
 	config_set_string(profileConfig, CONFIG_SECTION, "CurrentDirectory",
 			  newOutputFolderName.toStdString().c_str());
+
+	config_save(profileConfig);
 }
 
 void GroupRecordings::On_GroupRecordingToggle_Clicked() {
 	QString currentOutputFolder = QString(config_get_string(
-		profileConfig, CONFIG_SECTION, "CurrentDirectory"));
+		profileConfig, CONFIG_SECTION, "CurrentDirectory")).prepend("\\");
 
 	QString currentOutputPath =
 		QString(GetCurrentOutputPath(profileConfig));
 
-	if (currentOutputPath.contains(currentOutputFolder)) {
-		currentOutputFolder.remove(currentOutputFolder.prepend("\\"));
+	if (PluginCurrentlyEnabled()) {
+		currentOutputPath.remove(currentOutputFolder);
+		SetPluginCurrentlyEnabled(false);
+		ChangeToggleText(false);
 	} else {
-		currentOutputFolder.append(currentOutputFolder.prepend("\\"));
+		currentOutputPath.append(currentOutputFolder);
+		SetPluginCurrentlyEnabled(true);
+		ChangeToggleText(true);
 	}
+
+	config_save(profileConfig);
 
 	SetCurrentOutputPath(profileConfig,
 			     currentOutputPath.toStdString().c_str());
@@ -118,10 +137,15 @@ void GroupRecordings::InitializePlugin(MainDock *mainDock) {
 
 	profileConfig = obs_frontend_get_profile_config();
 
-	if (config_get_bool(profileConfig, CONFIG_SECTION, "Enabled") == NULL) {
-		config_set_bool(profileConfig, CONFIG_SECTION, "Enabled",
-				false);
-	}
+	groupRecordingsButton =
+		new QPushButton(QString::fromUtf8("Group Recordings"));
+	groupRecordingsButton->setObjectName("groupRecordingsButton");
+
+	groupRecordingsButtonToggle = new QPushButton();
+	ChangeToggleText(PluginCurrentlyEnabled());
+
+	groupRecordingsButtonToggle->setObjectName(
+		"groupRecordingsButtonToggle");
 
 	groupRecordingsDialog = new QDialog(mainDock);
 	groupRecordingsDialog->setWindowTitle(
@@ -144,4 +168,12 @@ void GroupRecordings::InitializePlugin(MainDock *mainDock) {
 	// Connects save button to callback
 	QWidget::connect(saveGroupRecordingButton, &QPushButton::clicked, this,
 			 &GroupRecordings::On_SaveGroupRecording_Clicked);
+
+	// Connects the group recordings tool button to the MainDock event handler.
+	QWidget::connect(groupRecordingsButton, &QPushButton::clicked, mainDock,
+			 &MainDock::on_groupRecordingsButton_clicked);
+
+	QWidget::connect(groupRecordingsButtonToggle, &QPushButton::clicked,
+			 this,
+			 &GroupRecordings::On_GroupRecordingToggle_Clicked);
 }

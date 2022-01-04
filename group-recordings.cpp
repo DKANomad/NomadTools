@@ -107,6 +107,8 @@ void GroupRecordings::On_SaveGroupRecording_Clicked() {
 	config_set_string(profileConfig, CONFIG_SECTION, "CurrentDirectory",
 			  newOutputFolderName.toStdString().c_str());
 
+	groupRecordingsDialog->hide();
+
 	config_save(profileConfig);
 }
 

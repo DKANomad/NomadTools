@@ -23,14 +23,35 @@ config_t *profileConfig;
 
 const char *CONFIG_SECTION = "NomadTools.GroupRecordings";
 
-bool PluginCurrentlyEnabled()
+bool GroupRecordings::PluginCurrentlyEnabled()
 {
 	return config_get_bool(profileConfig, CONFIG_SECTION, "Enabled");
 }
 
-void SetPluginCurrentlyEnabled(bool value)
+void GroupRecordings::SetPluginCurrentlyEnabled(bool value)
 {
+	QString currentOutputFolder =
+		QString(config_get_string(profileConfig, CONFIG_SECTION,
+					  "CurrentDirectory"))
+			.prepend("\\");
+
+	QString currentOutputPath =
+		QString(GetCurrentOutputPath(profileConfig));
+
+	if (value) {
+		currentOutputPath.append(currentOutputFolder);
+		ChangeToggleText(true);
+	} else {
+		
+		currentOutputPath.remove(currentOutputFolder);
+		ChangeToggleText(false);
+	}
 	config_set_bool(profileConfig, CONFIG_SECTION, "Enabled", value);
+
+	config_save(profileConfig);
+
+	SetCurrentOutputPath(profileConfig,
+			     currentOutputPath.toStdString().c_str());
 }
 
 void MainDock::on_groupRecordingsButton_clicked() {
@@ -113,26 +134,11 @@ void GroupRecordings::On_SaveGroupRecording_Clicked() {
 }
 
 void GroupRecordings::On_GroupRecordingToggle_Clicked() {
-	QString currentOutputFolder = QString(config_get_string(
-		profileConfig, CONFIG_SECTION, "CurrentDirectory")).prepend("\\");
-
-	QString currentOutputPath =
-		QString(GetCurrentOutputPath(profileConfig));
-
 	if (PluginCurrentlyEnabled()) {
-		currentOutputPath.remove(currentOutputFolder);
 		SetPluginCurrentlyEnabled(false);
-		ChangeToggleText(false);
 	} else {
-		currentOutputPath.append(currentOutputFolder);
 		SetPluginCurrentlyEnabled(true);
-		ChangeToggleText(true);
 	}
-
-	config_save(profileConfig);
-
-	SetCurrentOutputPath(profileConfig,
-			     currentOutputPath.toStdString().c_str());
 }
 
 void GroupRecordings::InitializePlugin(MainDock *mainDock) {

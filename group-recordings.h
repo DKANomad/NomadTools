@@ -16,6 +16,9 @@ public:
 
 	void ChangeToggleText(bool enabled);
 
+	bool PluginCurrentlyEnabled();
+	void SetPluginCurrentlyEnabled(bool value);
+
 	QPushButton *groupRecordingsButtonToggle;
 	QPushButton *groupRecordingsButton;
 };

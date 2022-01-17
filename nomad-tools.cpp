@@ -11,6 +11,16 @@ OBS_DECLARE_MODULE()
 
 OBS_MODULE_USE_DEFAULT_LOCALE("nomad-tools", "en-US")
 
+GroupRecordings *groupRecordingsPlugin;
+
+void OnClose(enum obs_frontend_event evt, void* data) {
+	if (evt == OBS_FRONTEND_EVENT_EXIT) {
+		
+		// Before OBS exits, always set the plugin to disabled and reset the path to original value
+		groupRecordingsPlugin->SetPluginCurrentlyEnabled(false);
+	}
+}
+
 bool obs_module_load(void)
 {
 	// Main housing dock for all custom tools.
@@ -24,7 +34,7 @@ bool obs_module_load(void)
 
 	QWidget *mainDockContents = new QWidget(mainDock);
 
-	GroupRecordings *groupRecordingsPlugin = new GroupRecordings();
+	groupRecordingsPlugin = new GroupRecordings();
 	groupRecordingsPlugin->InitializePlugin(mainDock);
 
 	QVBoxLayout *mainBoxLayout = new QVBoxLayout(mainDockContents);
@@ -38,6 +48,7 @@ bool obs_module_load(void)
 
 	mainDock->setWidget(mainDockContents);
 	obs_frontend_add_dock(mainDock);
+	obs_frontend_add_event_callback(OnClose, NULL);
 
 	return true;
 }

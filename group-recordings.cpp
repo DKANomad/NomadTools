@@ -4,9 +4,10 @@
 #include <QtCore/qdir.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qboxlayout.h>
-#include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qlabel.h>
 #include <QtWidgets/qformlayout.h>
+#include <QtWidgets/qmenu.h>
+#include <QtWidgets/qcombobox.h>
 
 #include <obs-frontend-api.h>
 #include <util/config-file.h>
@@ -14,47 +15,39 @@
 
 #include <util/platform.h>
 
-QVBoxLayout *groupRecordingsDialogLayout;
-QDialog *groupRecordingsDialog;
-QPushButton *saveGroupRecordingButton;
-ConfigFile basicConfig;
-QLineEdit *folderToAppend;
-config_t *profileConfig;
+QStringList GroupRecordings::GetDirectoryHistory() {
+	QString history = QString(config_get_string(
+		profileConfig, CONFIG_SECTION, "DirectoryHistory"));
 
-const char *CONFIG_SECTION = "NomadTools.GroupRecordings";
+	if (history.size() > 0) {
+		return history.split(QChar(','));
+	}
 
-bool GroupRecordings::PluginCurrentlyEnabled()
-{
+	return QStringList(GetCurrentDirectory());
+}
+
+void GroupRecordings::SetDirectoryHistory(QStringList historyList) {
+	QString history = historyList.join(QChar(','));
+
+	config_set_string(profileConfig, CONFIG_SECTION, "DirectoryHistory",
+			  history.toStdString().c_str());
+
+	config_save(profileConfig);
+}
+
+bool GroupRecordings::PluginCurrentlyEnabled() {
 	return config_get_bool(profileConfig, CONFIG_SECTION, "Enabled");
 }
 
 void GroupRecordings::SetPluginCurrentlyEnabled(bool value)
 {
-	QString currentOutputFolder =
-		QString(config_get_string(profileConfig, CONFIG_SECTION,
-					  "CurrentDirectory"))
-			.prepend("\\");
-
-	QString currentOutputPath =
-		QString(GetCurrentOutputPath(profileConfig));
-
-	if (value) {
-		currentOutputPath.append(currentOutputFolder);
-		ChangeToggleText(true);
-	} else {
-		
-		currentOutputPath.remove(currentOutputFolder);
-		ChangeToggleText(false);
-	}
 	config_set_bool(profileConfig, CONFIG_SECTION, "Enabled", value);
-
 	config_save(profileConfig);
 
-	SetCurrentOutputPath(profileConfig,
-			     currentOutputPath.toStdString().c_str());
+	SetCurrentOutputPath(profileConfig, value);
 }
 
-void MainDock::on_groupRecordingsButton_clicked() {
+void GroupRecordings::on_groupRecordingsButton_clicked() {
 	QString currentDirectory = QString(
 		config_get_string(profileConfig, CONFIG_SECTION,
 				  "CurrentDirectory"));
@@ -97,7 +90,25 @@ const char *GroupRecordings::GetCurrentOutputPath(config_t* config) {
 }
 
 // Use the same logic as OBSBasic to ascertain the current output path and change it
-void GroupRecordings::SetCurrentOutputPath(config_t* config, const char* newPath) {
+void GroupRecordings::SetCurrentOutputPath(config_t* config, bool enabled) {
+
+	QString currentOutputFolder =
+		QString(config_get_string(profileConfig, CONFIG_SECTION,
+					  "CurrentDirectory"))
+			.prepend("\\");
+
+	QString currentOutputPath =
+		QString(GetCurrentOutputPath(profileConfig));
+
+	if (enabled) {
+		currentOutputPath.append(currentOutputFolder);
+		ChangeToggleText(true);
+	} else {
+
+		currentOutputPath.remove(currentOutputFolder);
+		ChangeToggleText(false);
+	}
+
 	const char *mode = config_get_string(config, "Output", "Mode");
 
 	if (strcmp(mode, "Advanced") == 0) {
@@ -105,32 +116,70 @@ void GroupRecordings::SetCurrentOutputPath(config_t* config, const char* newPath
 			config_get_string(config, "AdvOut", "RecType");
 
 		if (strcmp(advanced_mode, "FFmpeg") == 0) {
-			config_set_string(config, "AdvOut",
-						 "FFFilePath", newPath);
+			config_set_string(
+				config, "AdvOut", "FFFilePath",
+				currentOutputPath.toStdString().c_str());
 		} else {
-			config_set_string(config, "AdvOut",
-						 "RecFilePath", newPath);
+			config_set_string(
+				config, "AdvOut", "RecFilePath",
+				currentOutputPath.toStdString().c_str());
 		}
 	} else {
-		config_set_string(config, "SimpleOutput", "FilePath", newPath);
+		config_set_string(config, "SimpleOutput", "FilePath",
+				  currentOutputPath.toStdString().c_str());
 	}
 
 	config_save(profileConfig);
 }
 
+void GroupRecordings::UpdateDirectoryHistory(QString newEntry) {
+	QStringList historyList = GetDirectoryHistory();
+	if (!historyList.contains(newEntry, Qt::CaseInsensitive)) {
+		historyList.prepend(newEntry);
+		if (historyList.count() > 5) {
+			historyList.removeLast();
+		}
+	} else {
+		int existingElIdx = historyList.indexOf(newEntry);
+		historyList.move(existingElIdx, 0);
+	}
+
+	SetDirectoryHistory(historyList);
+}
+
+void GroupRecordings::ReorderHistoryDropdown() {
+	groupRecordingsHistory->clear();
+	groupRecordingsHistory->addItems(GetDirectoryHistory());
+}
+
+void GroupRecordings::VerifyDirectoryExists(QString folderName) {
+	QString currentOuputPath = GetCurrentOutputPath(profileConfig);
+	QDir outputDir = QDir(QString(currentOuputPath));
+	outputDir.mkdir(folderName);
+
+	outputDir.cd(folderName);
+}
+
 void GroupRecordings::On_SaveGroupRecording_Clicked() {
 	QString newOutputFolderName = folderToAppend->text();
 
-	QDir outputDir = QDir(QString(GetCurrentOutputPath(profileConfig)));
-	outputDir.mkdir(newOutputFolderName);
-	outputDir.cd(newOutputFolderName);
+	// This is a hack for changing the dropdown when the plugin is enabled...I hate it
+	// It also handles verifying the folder exists while changing the folder, because otherwise it nests in the old directory.
+	if (PluginCurrentlyEnabled()) {
+		SetCurrentOutputPath(profileConfig, false);
+		SetCurrentDirectory(newOutputFolderName);
+		VerifyDirectoryExists(newOutputFolderName);
+		SetCurrentOutputPath(profileConfig, true);
+	} else {
+		VerifyDirectoryExists(newOutputFolderName);
+		SetCurrentDirectory(newOutputFolderName);
+	}
 
-	config_set_string(profileConfig, CONFIG_SECTION, "CurrentDirectory",
-			  newOutputFolderName.toStdString().c_str());
+	
 
 	groupRecordingsDialog->hide();
-
-	config_save(profileConfig);
+	UpdateDirectoryHistory(newOutputFolderName);
+	ReorderHistoryDropdown();
 }
 
 void GroupRecordings::On_GroupRecordingToggle_Clicked() {
@@ -141,20 +190,94 @@ void GroupRecordings::On_GroupRecordingToggle_Clicked() {
 	}
 }
 
-void GroupRecordings::InitializePlugin(MainDock *mainDock) {
+void GroupRecordings::SetCurrentDirectory(QString folderName) {
+	config_set_string(profileConfig, CONFIG_SECTION, "CurrentDirectory",
+			  folderName.toStdString().c_str());
 
-	profileConfig = obs_frontend_get_profile_config();
+	config_save(profileConfig);
+}
 
-	groupRecordingsButton =
-		new QPushButton(QString::fromUtf8("Group Recordings"));
-	groupRecordingsButton->setObjectName("groupRecordingsButton");
+QString GroupRecordings::GetCurrentDirectory()
+{
+	return QString(config_get_string(profileConfig, CONFIG_SECTION, "CurrentDirectory"));
+}
+
+void GroupRecordings::on_groupRecordingsHistory_Changed(QString text) {
+	UpdateDirectoryHistory(text);
+
+	// This is a hack for changing the dropdown when the plugin is enabled...I hate it
+	// It also handles verifying the folder exists while changing the folder, because otherwise it nests in the old directory.
+	if (PluginCurrentlyEnabled()) {
+		SetCurrentOutputPath(profileConfig, false);
+		SetCurrentDirectory(text);
+		VerifyDirectoryExists(text);
+		SetCurrentOutputPath(profileConfig, true);
+	} else {
+		VerifyDirectoryExists(text);
+		SetCurrentDirectory(text);
+	}
+
+	ReorderHistoryDropdown();
+}
+
+void GroupRecordings::InitialiseDockElements() {
+	groupRecordingsBoxLayout = new QHBoxLayout();
+	groupRecordingsBoxLayout->addSpacing(0);
+	groupRecordingsBoxLayout->setContentsMargins(QMargins(0, 0, 0, 0));
+
+	QString currentDirectory = QString(config_get_string(
+		profileConfig, CONFIG_SECTION, "CurrentDirectory"));
+
+	QIcon cogIcon;
+	cogIcon.addFile(
+		QString::fromUtf8(":/settings/images/settings/general.svg"),
+		QSize(), QIcon::Normal, QIcon::Off);
+
+	QMenu *groupRecordingsMenu = new QMenu();
+	QPushButton *groupRecordingsSettings = new QPushButton();
+
+	QSizePolicy cogSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	cogSizePolicy.setHorizontalStretch(0);
+	cogSizePolicy.setVerticalStretch(0);
+	cogSizePolicy.setHeightForWidth(
+		groupRecordingsSettings->sizePolicy().hasHeightForWidth());
+
+	groupRecordingsSettings->setSizePolicy(cogSizePolicy);
+	groupRecordingsSettings->setMaximumSize(QSize(22, 22));
+	groupRecordingsSettings->setText(QString::fromUtf8(""));
+	groupRecordingsSettings->setIcon(cogIcon);
+	groupRecordingsSettings->setFlat(true);
+	groupRecordingsSettings->setProperty(
+		"themeID", QVariant(QString::fromUtf8("configIconSmall")));
+
+	QStringList folderHistory = GetDirectoryHistory();
+	
+	groupRecordingsHistory = new QComboBox();
+	groupRecordingsHistory->addItems(folderHistory);
+
+	groupRecordingsBoxLayout->addWidget(groupRecordingsHistory);
+	groupRecordingsBoxLayout->addWidget(groupRecordingsSettings);
 
 	groupRecordingsButtonToggle = new QPushButton();
-	ChangeToggleText(PluginCurrentlyEnabled());
-
 	groupRecordingsButtonToggle->setObjectName(
 		"groupRecordingsButtonToggle");
 
+	ChangeToggleText(PluginCurrentlyEnabled());
+
+	// Connects the group recordings tool button to the MainDock event handler.
+	QWidget::connect(groupRecordingsSettings, &QPushButton::clicked,
+			 this, &GroupRecordings::on_groupRecordingsButton_clicked);
+
+	QWidget::connect(groupRecordingsButtonToggle, &QPushButton::clicked,
+			 this,
+			 &GroupRecordings::On_GroupRecordingToggle_Clicked);
+
+	QWidget::connect(groupRecordingsHistory, &QComboBox::textActivated,
+			 this,
+			 &GroupRecordings::on_groupRecordingsHistory_Changed);
+}
+
+void GroupRecordings::InitialiseDialog(MainDock *mainDock) {
 	groupRecordingsDialog = new QDialog(mainDock);
 	groupRecordingsDialog->setWindowTitle(
 		QString::fromUtf8("Group Recordings"));
@@ -167,21 +290,21 @@ void GroupRecordings::InitializePlugin(MainDock *mainDock) {
 
 	formLayout->addRow(folderToAppendLabel, folderToAppend);
 
-	groupRecordingsDialogLayout = new QVBoxLayout(groupRecordingsDialog);
+	QVBoxLayout* groupRecordingsDialogLayout = new QVBoxLayout(groupRecordingsDialog);
 	groupRecordingsDialogLayout->addLayout(formLayout);
 
-	saveGroupRecordingButton = new QPushButton(QString::fromUtf8("Save Changes"));
+	QPushButton *saveGroupRecordingButton =
+		new QPushButton(QString::fromUtf8("Save Changes"));
 	groupRecordingsDialogLayout->addWidget(saveGroupRecordingButton);
 
 	// Connects save button to callback
 	QWidget::connect(saveGroupRecordingButton, &QPushButton::clicked, this,
 			 &GroupRecordings::On_SaveGroupRecording_Clicked);
+}
 
-	// Connects the group recordings tool button to the MainDock event handler.
-	QWidget::connect(groupRecordingsButton, &QPushButton::clicked, mainDock,
-			 &MainDock::on_groupRecordingsButton_clicked);
+void GroupRecordings::InitializePlugin(MainDock *mainDock) {
+	profileConfig = obs_frontend_get_profile_config();
 
-	QWidget::connect(groupRecordingsButtonToggle, &QPushButton::clicked,
-			 this,
-			 &GroupRecordings::On_GroupRecordingToggle_Clicked);
+	InitialiseDockElements();
+	InitialiseDialog(mainDock);	
 }

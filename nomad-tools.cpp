@@ -38,9 +38,14 @@ bool obs_module_load(void)
 	groupRecordingsPlugin->InitializePlugin(mainDock);
 
 	QVBoxLayout *mainBoxLayout = new QVBoxLayout(mainDockContents);
-	mainBoxLayout->setSpacing(2);
+	mainBoxLayout->setSpacing(1);
 	mainBoxLayout->setAlignment(Qt::AlignTop);
-	mainBoxLayout->addWidget(groupRecordingsPlugin->groupRecordingsButton);
+	mainBoxLayout->setContentsMargins(QMargins(2, 4, 2, 4));
+	QWidget *boxLayoutContainer = new QWidget();
+	boxLayoutContainer->setLayout(
+		groupRecordingsPlugin->groupRecordingsBoxLayout);
+
+	mainBoxLayout->addWidget(boxLayoutContainer);
 	mainBoxLayout->addWidget(groupRecordingsPlugin->groupRecordingsButtonToggle);
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();

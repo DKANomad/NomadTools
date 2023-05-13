@@ -1,4 +1,5 @@
 project(nomad-tools)
+find_qt(COMPONENTS Widgets)
 
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -21,7 +22,7 @@ target_include_directories(nomad-tools PUBLIC ${nomad-tools_INCLUDE_DIRS})
 target_link_libraries(nomad-tools
       libobs
       obs-frontend-api
-      Qt5::Widgets)
+      Qt::Widgets)
 
 set_target_properties(nomad-tools PROPERTIES FOLDER
 		"plugins")

@@ -27,7 +27,6 @@ bool obs_module_load(void)
 	MainDock *mainDock = new MainDock();
 	mainDock->setWindowTitle(QString::fromUtf8("Nomad Tools"));
 	mainDock->setObjectName(QString::fromUtf8("nomadTools"));
-	mainDock->setFeatures(QDockWidget::AllDockWidgetFeatures);
 	mainDock->setFloating(false);
 	mainDock->setEnabled(true);
 	mainDock->setVisible(true);

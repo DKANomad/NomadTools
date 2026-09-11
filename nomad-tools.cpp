@@ -1,58 +1,63 @@
-#include "nomad-tools.h"
 #include "group-recordings.h"
 
-#include <obs-module.h>
-#include <obs-frontend-api.h>
+#include <QVBoxLayout>
+#include <QWidget>
 
-#include <QtWidgets/qmainwindow.h>
-#include <QtWidgets/qboxlayout.h>
+#include <obs-frontend-api.h>
+#include <obs-module.h>
 
 OBS_DECLARE_MODULE()
 
 OBS_MODULE_USE_DEFAULT_LOCALE("nomad-tools", "en-US")
 
-GroupRecordings *groupRecordingsPlugin;
+namespace {
+constexpr char DOCK_ID[] = "nomadTools";
+GroupRecordings *groupRecordingsPlugin = nullptr;
 
-void OnClose(enum obs_frontend_event evt, void* data) {
-	if (evt == OBS_FRONTEND_EVENT_EXIT) {
-		
-		// Before OBS exits, always set the plugin to disabled and reset the path to original value
-		groupRecordingsPlugin->SetPluginCurrentlyEnabled(false);
-	}
+void OnFrontendEvent(enum obs_frontend_event event, void *privateData)
+{
+	auto *plugin = static_cast<GroupRecordings *>(privateData);
+	plugin->HandleFrontendEvent(event);
 }
+} // namespace
 
 bool obs_module_load(void)
 {
-	// Main housing dock for all custom tools.
-	MainDock *mainDock = new MainDock();
-	mainDock->setWindowTitle(QString::fromUtf8("Nomad Tools"));
-	mainDock->setObjectName(QString::fromUtf8("nomadTools"));
-	mainDock->setFloating(false);
-	mainDock->setEnabled(true);
-	mainDock->setVisible(true);
+	auto *mainDockContents = new QWidget();
+	auto *plugin = new GroupRecordings();
+	plugin->InitializePlugin(mainDockContents);
 
-	QWidget *mainDockContents = new QWidget(mainDock);
-
-	groupRecordingsPlugin = new GroupRecordings();
-	groupRecordingsPlugin->InitializePlugin(mainDock);
-
-	QVBoxLayout *mainBoxLayout = new QVBoxLayout(mainDockContents);
+	auto *mainBoxLayout = new QVBoxLayout(mainDockContents);
 	mainBoxLayout->setSpacing(1);
 	mainBoxLayout->setAlignment(Qt::AlignTop);
 	mainBoxLayout->setContentsMargins(QMargins(2, 4, 2, 4));
-	QWidget *boxLayoutContainer = new QWidget();
-	boxLayoutContainer->setLayout(
-		groupRecordingsPlugin->groupRecordingsBoxLayout);
+	auto *boxLayoutContainer = new QWidget(mainDockContents);
+	boxLayoutContainer->setLayout(plugin->groupRecordingsBoxLayout);
 
 	mainBoxLayout->addWidget(boxLayoutContainer);
-	mainBoxLayout->addWidget(groupRecordingsPlugin->groupRecordingsButtonToggle);
+	mainBoxLayout->addWidget(plugin->groupRecordingsButtonToggle);
 
-	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	mainWindow->addDockWidget(Qt::BottomDockWidgetArea, mainDock);
+	if (!obs_frontend_add_dock_by_id(DOCK_ID, obs_module_text("NomadTools.DockTitle"), mainDockContents)) {
+		delete plugin;
+		delete mainDockContents;
+		return false;
+	}
 
-	mainDock->setWidget(mainDockContents);
-	obs_frontend_add_dock(mainDock);
-	obs_frontend_add_event_callback(OnClose, NULL);
+	groupRecordingsPlugin = plugin;
+	obs_frontend_add_event_callback(OnFrontendEvent, groupRecordingsPlugin);
 
 	return true;
+}
+
+void obs_module_unload(void)
+{
+	if (!groupRecordingsPlugin) {
+		return;
+	}
+
+	obs_frontend_remove_event_callback(OnFrontendEvent, groupRecordingsPlugin);
+	groupRecordingsPlugin->SetPluginCurrentlyEnabled(false);
+	delete groupRecordingsPlugin;
+	groupRecordingsPlugin = nullptr;
+	obs_frontend_remove_dock(DOCK_ID);
 }

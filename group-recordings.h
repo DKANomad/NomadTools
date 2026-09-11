@@ -1,49 +1,49 @@
 #pragma once
 
-#include "nomad-tools.h"
-#include <obs-frontend-api.h>
+#include <QComboBox>
+#include <QDialog>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QObject>
+#include <QPushButton>
+#include <QString>
+#include <QStringList>
 
-#include <QtWidgets/qpushbutton.h>
-#include <QtWidgets/qboxlayout.h>
-#include <QtWidgets/qlineedit.h>
+#include <obs-frontend-api.h>
 
 class GroupRecordings : public QObject {
 public:
-	const char *CONFIG_SECTION = "NomadTools.GroupRecordings";
-	config_t *profileConfig;
-
-	void InitializePlugin(MainDock *mainDock);
-	const char *GetCurrentOutputPath(config_t *config);
-	void SetCurrentOutputPath(config_t *config, bool enabled);
-
-	void On_SaveGroupRecording_Clicked();
-	void On_GroupRecordingToggle_Clicked();
-
-	void ChangeToggleText(bool enabled);
-
+	void InitializePlugin(QWidget *parent);
+	void HandleFrontendEvent(enum obs_frontend_event event);
 	bool PluginCurrentlyEnabled();
 	void SetPluginCurrentlyEnabled(bool value);
 
+	QPushButton *groupRecordingsButtonToggle = nullptr;
+	QHBoxLayout *groupRecordingsBoxLayout = nullptr;
+
+private:
+	void ChangeToggleText(bool enabled);
+	void InitializeProfile();
 	void InitialiseDockElements();
-	void InitialiseDialog(MainDock *mainDock);
+	void InitialiseDialog(QWidget *parent);
+	void OnSaveGroupRecordingClicked();
+	void OnGroupRecordingToggleClicked();
+	void OnGroupRecordingsHistoryChanged(const QString &text);
+	void OpenGroupRecordingsDialog(bool enableAfterSave = false);
 
-	void on_groupRecordingsButton_clicked();
-	void on_groupRecordingsHistory_Changed(QString text);
-
-	void UpdateDirectoryHistory(QString newEntry);
-	void SetCurrentDirectory(QString folderName);
-	QString GetCurrentDirectory();
-
-	void ReorderHistoryDropdown();
-	void VerifyDirectoryExists(QString folderName);
+	QString GetCurrentOutputPath(config_t *config) const;
+	bool SetCurrentOutputPath(config_t *config, bool enabled);
+	bool VerifyDirectoryExists(const QString &folderName);
 
 	QStringList GetDirectoryHistory();
-	void SetDirectoryHistory(QStringList historyList);
+	void SetDirectoryHistory(const QStringList &historyList);
+	void UpdateDirectoryHistory(const QString &newEntry);
+	void ReorderHistoryDropdown();
+	void SetCurrentDirectory(const QString &folderName);
+	QString GetCurrentDirectory();
 
-	QPushButton *groupRecordingsButtonToggle;
-	QDialog *groupRecordingsDialog;
-	QLineEdit *folderToAppend;
-	QComboBox *groupRecordingsHistory;
-
-	QHBoxLayout *groupRecordingsBoxLayout;
+	QDialog *groupRecordingsDialog = nullptr;
+	QLineEdit *folderToAppend = nullptr;
+	QComboBox *groupRecordingsHistory = nullptr;
+	bool enableAfterSave = false;
 };

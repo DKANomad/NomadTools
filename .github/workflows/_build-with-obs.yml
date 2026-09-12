@@ -133,7 +133,9 @@ jobs:
             $ChecksumLines += "$(($hash = Get-FileHash -Algorithm SHA256 $SymbolsArchive).Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($SymbolsArchive))"
           }
 
-          $ChecksumLines | Set-Content -Path (Join-Path $ArtifactDirectory 'CHECKSUMS.txt') -Encoding ascii
+          $ChecksumPath = Join-Path $ArtifactDirectory 'CHECKSUMS.txt'
+          $ChecksumContent = ($ChecksumLines -join "`n") + "`n"
+          [IO.File]::WriteAllText($ChecksumPath, $ChecksumContent, [Text.UTF8Encoding]::new($false))
           "artifact_path=$ArtifactDirectory" >> $env:GITHUB_OUTPUT
 
       - name: Upload NomadTools artifact

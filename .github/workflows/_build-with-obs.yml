@@ -1,0 +1,148 @@
+name: Build with OBS Studio
+
+on:
+  workflow_call:
+    inputs:
+      obs_ref:
+        description: OBS Studio branch or tag to build against
+        required: true
+        type: string
+      configuration:
+        description: CMake build configuration
+        required: false
+        default: RelWithDebInfo
+        type: string
+      package:
+        description: Package and upload the plugin
+        required: false
+        default: false
+        type: boolean
+      artifact_name:
+        description: Name for the uploaded GitHub Actions artifact
+        required: false
+        default: nomad-tools-windows-x64
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: OBS ${{ inputs.obs_ref }} / Windows x64
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out OBS Studio
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: obsproject/obs-studio
+          ref: ${{ inputs.obs_ref }}
+          submodules: recursive
+          fetch-depth: 0
+          path: obs-studio
+
+      - name: Check out NomadTools
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          path: obs-studio/plugins/nomad-tools
+
+      - name: Register NomadTools with OBS Studio
+        working-directory: obs-studio
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Add-Content -Path plugins/CMakeLists.txt -Value @'
+
+          add_obs_plugin(nomad-tools PLATFORMS WINDOWS)
+          '@
+
+      - name: Configure OBS Studio
+        working-directory: obs-studio
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          cmake --preset windows-ci-x64 -DENABLE_BROWSER=OFF
+
+      - name: Build NomadTools
+        working-directory: obs-studio
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          cmake --build --preset windows-x64 --config '${{ inputs.configuration }}' --target nomad-tools --parallel -- /consoleLoggerParameters:Summary /noLogo
+
+      - name: Record build details
+        working-directory: obs-studio
+        run: |
+          $ObsCommit = git rev-parse HEAD
+          @"
+          ### NomadTools compatibility build
+
+          - OBS ref: ``${{ inputs.obs_ref }}``
+          - OBS commit: ``$ObsCommit``
+          - NomadTools commit: ``${{ github.sha }}``
+          - Configuration: ``${{ inputs.configuration }}``
+          - Architecture: ``x64``
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Package NomadTools
+        if: inputs.package
+        id: package
+        working-directory: obs-studio
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $RuntimeDirectory = Join-Path $PWD 'build_x64/rundir/${{ inputs.configuration }}'
+          $PluginBinary = Join-Path $RuntimeDirectory 'obs-plugins/64bit/nomad-tools.dll'
+          $PluginData = Join-Path $RuntimeDirectory 'data/obs-plugins/nomad-tools'
+          $PluginSymbols = Join-Path $RuntimeDirectory 'obs-plugins/64bit/nomad-tools.pdb'
+          $StagingDirectory = Join-Path $env:RUNNER_TEMP 'nomad-tools-package'
+          $ArtifactDirectory = Join-Path $env:RUNNER_TEMP 'nomad-tools-artifacts'
+
+          if (-not (Test-Path $PluginBinary -PathType Leaf)) {
+            throw "Plugin binary was not staged at $PluginBinary"
+          }
+          if (-not (Test-Path $PluginData -PathType Container)) {
+            throw "Plugin data was not staged at $PluginData"
+          }
+
+          New-Item -ItemType Directory -Force -Path (Join-Path $StagingDirectory 'obs-plugins/64bit') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $StagingDirectory 'data/obs-plugins') | Out-Null
+          New-Item -ItemType Directory -Force -Path $ArtifactDirectory | Out-Null
+
+          Copy-Item $PluginBinary (Join-Path $StagingDirectory 'obs-plugins/64bit/nomad-tools.dll')
+          Copy-Item $PluginData (Join-Path $StagingDirectory 'data/obs-plugins/nomad-tools') -Recurse
+
+          $PluginArchive = Join-Path $ArtifactDirectory 'nomad-tools.zip'
+          Compress-Archive -Path (Join-Path $StagingDirectory '*') -DestinationPath $PluginArchive
+
+          $ChecksumLines = @(
+            "$(($hash = Get-FileHash -Algorithm SHA256 $PluginArchive).Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($PluginArchive))"
+          )
+
+          if (Test-Path $PluginSymbols -PathType Leaf) {
+            $SymbolsArchive = Join-Path $ArtifactDirectory 'nomad-tools-symbols.zip'
+            Compress-Archive -Path $PluginSymbols -DestinationPath $SymbolsArchive
+            $ChecksumLines += "$(($hash = Get-FileHash -Algorithm SHA256 $SymbolsArchive).Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($SymbolsArchive))"
+          }
+
+          $ChecksumPath = Join-Path $ArtifactDirectory 'CHECKSUMS.txt'
+          $ChecksumContent = ($ChecksumLines -join "`n") + "`n"
+          [IO.File]::WriteAllText($ChecksumPath, $ChecksumContent, [Text.UTF8Encoding]::new($false))
+          "artifact_path=$ArtifactDirectory" >> $env:GITHUB_OUTPUT
+
+      - name: Upload NomadTools artifact
+        if: inputs.package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 30

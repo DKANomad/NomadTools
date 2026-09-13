@@ -1,0 +1,57 @@
+name: OBS Compatibility
+run-name: OBS compatibility build for ${{ github.ref_name }}
+
+on:
+  schedule:
+    - cron: '17 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: obs-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stable-version:
+    name: Resolve latest stable OBS release
+    runs-on: ubuntu-24.04
+    outputs:
+      obs_ref: ${{ steps.release.outputs.obs_ref }}
+    steps:
+      - name: Resolve latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          obs_ref="$(gh api repos/obsproject/obs-studio/releases/latest --jq '.tag_name')"
+          if [[ ! "${obs_ref}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected OBS release tag: ${obs_ref}" >&2
+            exit 1
+          fi
+
+          echo "obs_ref=${obs_ref}" >> "${GITHUB_OUTPUT}"
+          echo "Latest stable OBS release: \`${obs_ref}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+  build:
+    name: Build against OBS ${{ matrix.channel }}
+    needs: stable-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: stable (${{ needs.stable-version.outputs.obs_ref }})
+            obs_ref: ${{ needs.stable-version.outputs.obs_ref }}
+          - channel: master
+            obs_ref: master
+    uses: ./.github/workflows/_build-with-obs.yml
+    permissions:
+      contents: read
+    with:
+      obs_ref: ${{ matrix.obs_ref }}
+      configuration: RelWithDebInfo
+      package: false

@@ -41,7 +41,7 @@ jobs:
           repository: obsproject/obs-studio
           ref: ${{ inputs.obs_ref }}
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0
           path: obs-studio
 
       - name: Check out NomadTools
